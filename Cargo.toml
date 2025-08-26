@@ -1,0 +1,10 @@
+[package]
+name = "siscomp"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+simulador = { git = "https://github.com/amatgil/Sis-mulador", package = "sICmulador" }
+thiserror = "2.0.16"
