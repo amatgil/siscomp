@@ -90,10 +90,10 @@ pub struct NoFnNameError(#[from] SymbolNotFoundError);
 
 fn parse_function<'i>(input: &'i str) -> IResult<'i, FunctionParseError, Statement<'i>> {
     let input = input.trim_start();
-    let (input, ret_type) = dbg!(parse_symbol(input).map_err(NoFnRetTypeError))?;
-    let (input, name) = dbg!(parse_symbol(input).map_err(NoFnNameError))?;
-    let (input, args) = dbg!(parse_function_arguments(input))?;
-    let (input, body) = dbg!(parse_block(input))?;
+    let (input, ret_type) = parse_symbol(input).map_err(NoFnRetTypeError)?;
+    let (input, name) = parse_symbol(input).map_err(NoFnNameError)?;
+    let (input, args) = parse_function_arguments(input)?;
+    let (input, body) = parse_block(input)?;
     Ok((
         input,
         Statement::FunctionDeclaration {
@@ -348,6 +348,43 @@ fn char_pointer_basic() {
     let source = "
 void main() {
   char* s = \"Woa a string\";
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn basic_multiple_fn_declaration() {
+    let source = "
+void do_nothing() {
+}
+
+void main() {
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn basic_fn_call() {
+    let source = "
+void do_nothing() {
+}
+
+void main() {
+   void nothing = do_nothing();
 }";
     let (_, program) = match parse_function(source) {
         Ok(o) => o,
