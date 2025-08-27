@@ -276,3 +276,85 @@ fn empty_function() {
     )
 }
 
+#[test]
+fn single_declaration() {
+    let source = "
+void main() {
+  int x = 1;
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn double_declaration() {
+    let source = "
+void main() {
+  int x = 1;
+  int y = 2;
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn pointer_declaration_left() {
+    let source = "
+void main() {
+  int x = 1;
+  int* p = &x;
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn pointer_declaration_right() {
+    let source = "
+void main() {
+  int x = 1;
+  int *p = &x;
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
+
+#[test]
+fn char_pointer_basic() {
+    let source = "
+void main() {
+  char* s = \"Woa a string\";
+}";
+    let (_, program) = match parse_function(source) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("ERROR: {}", print_error_chain(&e));
+            panic!("did not parse correctly")
+        }
+    };
+    assert_eq!(program, todo!())
+}
