@@ -11,7 +11,7 @@ use std::error::Error;
 /// Ok((input, parsed)), Err(ParseError)
 ///
 /// RetT is the return type, 'i is the input lifetime, 'e is the error lifetime
-pub type IResult<'i, E, RetT> = Result<(&'i str, RetT), E>;
+pub type PResult<'i, E, RetT> = Result<(&'i str, RetT), E>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement<'a> {
@@ -47,7 +47,7 @@ pub fn parse<'i>(input: &'i str) -> Result<Vec<Statement<'i>>, ParseError> {
 #[error("expected a symbol")]
 struct SymbolNotFoundError;
 
-fn parse_symbol<'i>(input: &'i str) -> IResult<'i, SymbolNotFoundError, &'i str> {
+fn parse_symbol<'i>(input: &'i str) -> PResult<'i, SymbolNotFoundError, &'i str> {
     let input = input.trim_start();
     match take_while(input, char::is_alphabetic) {
         Ok(o) => Ok(o),
@@ -60,7 +60,7 @@ fn parse_symbol<'i>(input: &'i str) -> IResult<'i, SymbolNotFoundError, &'i str>
 pub struct TagNotFoundError(String);
 
 // Not sure about the lifetime of tag
-fn parse_tag<'i>(input: &'i str, tag: &'i str) -> IResult<'i, TagNotFoundError, &'i str> {
+fn parse_tag<'i>(input: &'i str, tag: &'i str) -> PResult<'i, TagNotFoundError, &'i str> {
     let input = input.trim_start();
     if let Some(rest) = input.strip_prefix(tag) {
         Ok((rest, tag))
@@ -88,7 +88,7 @@ pub struct NoFnRetTypeError(#[from] SymbolNotFoundError);
 #[error("did not find a function name")]
 pub struct NoFnNameError(#[from] SymbolNotFoundError);
 
-fn parse_function<'i>(input: &'i str) -> IResult<'i, FunctionParseError, Statement<'i>> {
+fn parse_function<'i>(input: &'i str) -> PResult<'i, FunctionParseError, Statement<'i>> {
     let input = input.trim_start();
     let (input, ret_type) = parse_symbol(input).map_err(NoFnRetTypeError)?;
     let (input, name) = parse_symbol(input).map_err(NoFnNameError)?;
@@ -135,7 +135,7 @@ pub struct MalformedIdentInArgsList(#[from] SymbolNotFoundError);
 // int a, int* b
 fn parse_function_arguments<'i>(
     input: &'i str,
-) -> IResult<'i, InvalidArgsError, Vec<(&'i str, &'i str)>> {
+) -> PResult<'i, InvalidArgsError, Vec<(&'i str, &'i str)>> {
     let mut output = vec![];
     let input = input.trim_start();
 
@@ -180,7 +180,7 @@ pub enum InvalidBlockError {
     NoCloseBracket(#[from] NoCloseBracketError),
 }
 
-fn parse_block<'i>(input: &'i str) -> IResult<'i, InvalidBlockError, Vec<Statement<'i>>> {
+fn parse_block<'i>(input: &'i str) -> PResult<'i, InvalidBlockError, Vec<Statement<'i>>> {
     let ret = vec![];
     let input = input.trim_start();
     let (input, _) = parse_tag(input, "{").map_err(NoOpenBracketError)?;
@@ -192,7 +192,7 @@ fn parse_block<'i>(input: &'i str) -> IResult<'i, InvalidBlockError, Vec<Stateme
     Ok((input, ret))
 }
 
-fn take_while<'i>(input: &'i str, predicate: impl Fn(char) -> bool) -> IResult<'i, (), &'i str> {
+fn take_while<'i>(input: &'i str, predicate: impl Fn(char) -> bool) -> PResult<'i, (), &'i str> {
     let mut ret = None;
     for (i, c) in input.char_indices() {
         if predicate(c) {
@@ -224,10 +224,10 @@ fn alt<'i, RetT>(
     input: &'i str,
     alternatives: &[(
         &'static str,
-        impl Fn(&'i str) -> IResult<'i, Box<dyn error::Error>, RetT>,
+        impl Fn(&'i str) -> PResult<'i, Box<dyn error::Error>, RetT>,
         // TODO: I don't like the dyn ^here :(
     )],
-) -> IResult<'i, NoAltMatchError, RetT> {
+) -> PResult<'i, NoAltMatchError, RetT> {
     let input = input.trim_start();
 
     for (_name, alt) in alternatives {
