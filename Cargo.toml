@@ -7,5 +7,6 @@ description = "C89 compiler for a custom SISA"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ariadne = "0.5.1"
 simulador = { git = "https://github.com/amatgil/Sis-mulador", package = "sICmulador" }
 thiserror = "2.0.16"
