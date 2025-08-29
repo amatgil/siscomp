@@ -174,6 +174,7 @@ impl<'src> Iterator for Lexer<'src> {
         }
 
         /// Is 'left' followed by 'right'?
+        /// If yes, return `yes`. If not, return `no`
         fn followed_by<'src>(
             s: &mut Lexer<'src>,
             next: Option<char>,
@@ -249,6 +250,7 @@ impl<'src> Iterator for Lexer<'src> {
                         end += next.len_utf8()
                     }
                     self.byte_pos = end;
+
                     let ident = &self.whole[byte_start..end];
                     break Some(if let Ok(keyword) = Keyword::from_str(ident) {
                         Token {
@@ -315,6 +317,32 @@ fn function_def_with_args() {
     use Keyword as Kw;
     use TokenKind as TK;
     let s = "void main(int argc, char **argv) {}";
+    let mut l = Lexer::new(s);
+
+    assert_eq!(TK::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
+    assert_eq!(TK::Ident("main"), l.next().unwrap().kind);
+
+    assert_eq!(TK::ParenOpen, l.next().unwrap().kind);
+
+    assert_eq!(TK::Keyword(Kw::KwInt), l.next().unwrap().kind);
+    assert_eq!(TK::Ident("argc"), l.next().unwrap().kind);
+    assert_eq!(TK::Comma, l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Kw::KwChar), l.next().unwrap().kind);
+    assert_eq!(TK::Star, l.next().unwrap().kind);
+    assert_eq!(TK::Star, l.next().unwrap().kind);
+    assert_eq!(TK::Ident("argv"), l.next().unwrap().kind);
+
+    assert_eq!(TK::ParenClose, l.next().unwrap().kind);
+
+    assert_eq!(TK::BraceOpen, l.next().unwrap().kind);
+    assert_eq!(TK::BraceClose, l.next().unwrap().kind);
+}
+
+#[test]
+fn function_def_with_args_and_newlines() {
+    use Keyword as Kw;
+    use TokenKind as TK;
+    let s = "void\nmain(int argc,\nchar **argv)\n{\n\n}\n\n\n";
     let mut l = Lexer::new(s);
 
     assert_eq!(TK::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
