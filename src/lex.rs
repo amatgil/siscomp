@@ -7,13 +7,18 @@ struct Lexer<'src> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token<'src> {
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-    LeftBracket,
-    RightBracket,
+pub struct Token<'src> {
+    kind: TokenKind<'src>,
+    byte_start: usize,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind<'src> {
+    ParenOpen,
+    ParenClose,
+    BraceOpen,
+    BraceClose,
+    BracketOpen,
+    BracketClose,
     Comma,
     Colon,
     Dot,
@@ -138,7 +143,19 @@ impl<'src> Lexer<'src> {
 
     /// Returns (line, column)
     fn get_line_and_col(&self) -> (u64, u64) {
-        todo!()
+        let mut line = 0;
+        let mut col = 0;
+        for (i, c) in self.whole.char_indices() {
+            col += 1;
+            if i >= self.byte_pos {
+                break;
+            } else if c == '\n' {
+                line += 1;
+                col = 0;
+            }
+        }
+
+        (line, col)
     }
 }
 
@@ -146,10 +163,14 @@ impl<'src> Iterator for Lexer<'src> {
     type Item = Token<'src>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use Token as T;
-        fn ret_and_adv<'src>(s: &mut Lexer<'src>, left: char, t: Token<'src>) -> Token<'src> {
+        use TokenKind as TK;
+        fn ret_and_adv<'src>(s: &mut Lexer<'src>, left: char, t: TokenKind<'src>) -> Token<'src> {
+            let byte_start = s.byte_pos;
             s.byte_pos += left.len_utf8();
-            t
+            Token {
+                kind: t,
+                byte_start,
+            }
         }
 
         /// Is 'left' followed by 'right'?
@@ -158,17 +179,24 @@ impl<'src> Iterator for Lexer<'src> {
             next: Option<char>,
             left: char,
             right: char,
-            yes: Token<'src>,
-            no: Token<'src>,
+            yes: TokenKind<'src>,
+            no: TokenKind<'src>,
         ) -> Token<'src> {
+            let byte_start = s.byte_pos;
             match next {
                 Some(n) if n == right => {
                     s.byte_pos += left.len_utf8() + right.len_utf8();
-                    yes
+                    Token {
+                        kind: yes,
+                        byte_start,
+                    }
                 }
                 _ => {
                     s.byte_pos += left.len_utf8();
-                    no
+                    Token {
+                        kind: no,
+                        byte_start,
+                    }
                 }
             }
         }
@@ -181,42 +209,57 @@ impl<'src> Iterator for Lexer<'src> {
                     self.byte_pos += ws.len_utf8();
                     continue;
                 }
-                '(' => break Some(ret_and_adv(self, '(', T::LeftParen)),
-                ')' => break Some(ret_and_adv(self, ')', T::RightParen)),
-                '{' => break Some(ret_and_adv(self, '{', T::LeftBrace)),
-                '}' => break Some(ret_and_adv(self, '}', T::RightBrace)),
-                '[' => break Some(ret_and_adv(self, '[', T::LeftBracket)),
-                ']' => break Some(ret_and_adv(self, ']', T::RightBracket)),
-                ',' => break Some(ret_and_adv(self, ',', T::Comma)),
-                ':' => break Some(ret_and_adv(self, ':', T::Colon)),
-                ';' => break Some(ret_and_adv(self, ';', T::Semicolon)),
-                '.' => break Some(ret_and_adv(self, '.', T::Dot)),
-                '+' => break f(self, cs.next(), '+', '=', T::PlusEqual, T::Plus),
-                '-' => break f(self, cs.next(), '-', '=', T::MinusEqual, T::Minus),
-                '*' => break f(self, cs.next(), '*', '=', T::StarEqual, T::Star),
-                '/' => break f(self, cs.next(), '/', '=', T::StarEqual, T::Star),
-                '%' => break f(self, cs.next(), '%', '=', T::PercentEqual, T::Percent),
-                '~' => break f(self, cs.next(), '~', '=', T::TildeEqual, T::Tilde),
-                '!' => break f(self, cs.next(), '!', '=', T::BangEqual, T::Bang),
-                '=' => break f(self, cs.next(), '=', '=', T::EqualEqual, T::Equal),
-                '<' => break f(self, cs.next(), '<', '=', T::LessEqual, T::Less),
-                '>' => break f(self, cs.next(), '>', '=', T::GreaterEqual, T::Greater),
-                '&' => break f(self, cs.next(), '&', '&', T::DoubleAmpersand, T::Ampersand),
-                '|' => break f(self, cs.next(), '|', '|', T::DoublePipe, T::Pipe),
+                '(' => break Some(ret_and_adv(self, '(', TK::ParenOpen)),
+                ')' => break Some(ret_and_adv(self, ')', TK::ParenClose)),
+                '{' => break Some(ret_and_adv(self, '{', TK::BraceOpen)),
+                '}' => break Some(ret_and_adv(self, '}', TK::BraceClose)),
+                '[' => break Some(ret_and_adv(self, '[', TK::BracketOpen)),
+                ']' => break Some(ret_and_adv(self, ']', TK::BracketClose)),
+                ',' => break Some(ret_and_adv(self, ',', TK::Comma)),
+                ':' => break Some(ret_and_adv(self, ':', TK::Colon)),
+                ';' => break Some(ret_and_adv(self, ';', TK::Semicolon)),
+                '.' => break Some(ret_and_adv(self, '.', TK::Dot)),
+                '+' => break f(self, cs.next(), '+', '=', TK::PlusEqual, TK::Plus),
+                '-' => break f(self, cs.next(), '-', '=', TK::MinusEqual, TK::Minus),
+                '*' => break f(self, cs.next(), '*', '=', TK::StarEqual, TK::Star),
+                '/' => break f(self, cs.next(), '/', '=', TK::StarEqual, TK::Star),
+                '%' => break f(self, cs.next(), '%', '=', TK::PercentEqual, TK::Percent),
+                '~' => break f(self, cs.next(), '~', '=', TK::TildeEqual, TK::Tilde),
+                '!' => break f(self, cs.next(), '!', '=', TK::BangEqual, TK::Bang),
+                '=' => break f(self, cs.next(), '=', '=', TK::EqualEqual, TK::Equal),
+                '<' => break f(self, cs.next(), '<', '=', TK::LessEqual, TK::Less),
+                '>' => break f(self, cs.next(), '>', '=', TK::GreaterEqual, TK::Greater),
+                '&' => {
+                    break f(
+                        self,
+                        cs.next(),
+                        '&',
+                        '&',
+                        TK::DoubleAmpersand,
+                        TK::Ampersand,
+                    )
+                }
+                '|' => break f(self, cs.next(), '|', '|', TK::DoublePipe, TK::Pipe),
                 c if c == '_' || c.is_alphabetic() => {
-                    let start = self.byte_pos;
-                    let mut end = start + c.len_utf8();
+                    let byte_start = self.byte_pos;
+                    let mut end = byte_start + c.len_utf8();
                     while let Some(next) = cs.next()
                         && (next.is_alphanumeric() || next == '_')
                     {
                         end += next.len_utf8()
                     }
                     self.byte_pos = end;
-                    let ident = &self.whole[start..end];
+                    let ident = &self.whole[byte_start..end];
                     break Some(if let Ok(keyword) = Keyword::from_str(ident) {
-                        Token::Keyword(keyword)
+                        Token {
+                            kind: TokenKind::Keyword(keyword),
+                            byte_start,
+                        }
                     } else {
-                        Token::Ident(ident)
+                        Token {
+                            kind: TokenKind::Ident(ident),
+                            byte_start,
+                        }
                     });
                 }
                 _ => break None,
@@ -226,36 +269,69 @@ impl<'src> Iterator for Lexer<'src> {
 }
 
 #[test]
-fn basic_lexing() {
+fn basic() {
     let s = "x && y;";
     let mut l = Lexer::new(s);
-    assert_eq!(Token::Ident("x"), l.next().unwrap());
-    assert_eq!(Token::DoubleAmpersand, l.next().unwrap());
-    assert_eq!(Token::Ident("y"), l.next().unwrap());
-    assert_eq!(Token::Semicolon, l.next().unwrap());
+    assert_eq!(TokenKind::Ident("x"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::DoubleAmpersand, l.next().unwrap().kind);
+    assert_eq!(TokenKind::Ident("y"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::Semicolon, l.next().unwrap().kind);
+    assert_eq!(None, l.next());
 }
 
 #[test]
 fn multichar_ident() {
     let s = "hola && adeu || (si % no)";
     let mut l = Lexer::new(s);
-    assert_eq!(Token::Ident("hola"), l.next().unwrap());
-    assert_eq!(Token::DoubleAmpersand, l.next().unwrap());
-    assert_eq!(Token::Ident("adeu"), l.next().unwrap());
-    assert_eq!(Token::DoublePipe, l.next().unwrap());
+    assert_eq!(TokenKind::Ident("hola"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::DoubleAmpersand, l.next().unwrap().kind);
+    assert_eq!(TokenKind::Ident("adeu"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::DoublePipe, l.next().unwrap().kind);
 
-    assert_eq!(Token::LeftParen, l.next().unwrap());
-    assert_eq!(Token::Ident("si"), l.next().unwrap());
-    assert_eq!(Token::Percent, l.next().unwrap());
-    assert_eq!(Token::Ident("no"), l.next().unwrap());
-    assert_eq!(Token::RightParen, l.next().unwrap());
+    assert_eq!(TokenKind::ParenOpen, l.next().unwrap().kind);
+    assert_eq!(TokenKind::Ident("si"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::Percent, l.next().unwrap().kind);
+    assert_eq!(TokenKind::Ident("no"), l.next().unwrap().kind);
+    assert_eq!(TokenKind::ParenClose, l.next().unwrap().kind);
+    assert_eq!(None, l.next());
 }
 
-//l @ '+' => Some(followed_by(
-//    self,
-//    l,
-//    '=',
-//    cs.next(),
-//    Token::PlusEqual,
-//    Token::Plus,
-//)),
+#[test]
+fn function_def() {
+    let s = "void main() {}";
+    let mut l = Lexer::new(s);
+    assert_eq!(TokenKind::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
+    assert_eq!(TokenKind::Ident("main"), l.next().unwrap().kind);
+
+    assert_eq!(TokenKind::ParenOpen, l.next().unwrap().kind);
+    assert_eq!(TokenKind::ParenClose, l.next().unwrap().kind);
+
+    assert_eq!(TokenKind::BraceOpen, l.next().unwrap().kind);
+    assert_eq!(TokenKind::BraceClose, l.next().unwrap().kind);
+}
+
+#[test]
+fn function_def_with_args() {
+    use Keyword as Kw;
+    use TokenKind as TK;
+    let s = "void main(int argc, char **argv) {}";
+    let mut l = Lexer::new(s);
+
+    assert_eq!(TK::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
+    assert_eq!(TK::Ident("main"), l.next().unwrap().kind);
+
+    assert_eq!(TK::ParenOpen, l.next().unwrap().kind);
+
+    assert_eq!(TK::Keyword(Kw::KwInt), l.next().unwrap().kind);
+    assert_eq!(TK::Ident("argc"), l.next().unwrap().kind);
+    assert_eq!(TK::Comma, l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Kw::KwChar), l.next().unwrap().kind);
+    assert_eq!(TK::Star, l.next().unwrap().kind);
+    assert_eq!(TK::Star, l.next().unwrap().kind);
+    assert_eq!(TK::Ident("argv"), l.next().unwrap().kind);
+
+    assert_eq!(TK::ParenClose, l.next().unwrap().kind);
+
+    assert_eq!(TK::BraceOpen, l.next().unwrap().kind);
+    assert_eq!(TK::BraceClose, l.next().unwrap().kind);
+}
