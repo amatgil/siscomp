@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-struct Lexer<'src> {
+pub struct Lexer<'src> {
     whole: &'src str,
     /// Must ALWAYS exist outside of a utf8 boundary, i.e. between chars
     byte_pos: usize,
@@ -8,8 +8,8 @@ struct Lexer<'src> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'src> {
-    kind: TokenKind<'src>,
-    byte_start: usize,
+    pub kind: TokenKind<'src>,
+    pub byte_start: usize,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind<'src> {
@@ -44,10 +44,14 @@ pub enum TokenKind<'src> {
     Bang,
     Equal,
     Ampersand,
-    DoubleAmpersand,
+    DoubleAmpersnd,
     Pipe,
     DoublePipe,
     String(&'src str),
+    /// We don't know the precision yet, so we keep the whole source
+    Integer(&'src str),
+    /// We don't know the precision yet, so we keep the whole source
+    Float(&'src str),
     Keyword(Keyword), // I don't know if they should just be a straight ident...
     Ident(&'src str),
 }
@@ -131,7 +135,7 @@ impl FromStr for Keyword {
 }
 
 impl<'src> Lexer<'src> {
-    fn new(input: &'src str) -> Self {
+    pub fn new(input: &'src str) -> Self {
         Self {
             whole: input,
             byte_pos: 0,
@@ -142,7 +146,7 @@ impl<'src> Lexer<'src> {
     }
 
     /// Returns (line, column)
-    fn get_line_and_col(&self) -> (u64, u64) {
+    pub fn get_line_and_col(&self) -> (u64, u64) {
         let mut line = 0;
         let mut col = 0;
         for (i, c) in self.whole.char_indices() {
@@ -210,6 +214,13 @@ impl<'src> Iterator for Lexer<'src> {
                     self.byte_pos += ws.len_utf8();
                     continue;
                 }
+                '/' if {
+                    let n = cs.next();
+                    n == Some('/') || n == Some('*')
+                } =>
+                {
+                    todo!("comments are not yet handled!")
+                }
                 '(' => break Some(ret_and_adv(self, '(', TK::ParenOpen)),
                 ')' => break Some(ret_and_adv(self, ')', TK::ParenClose)),
                 '{' => break Some(ret_and_adv(self, '{', TK::BraceOpen)),
@@ -230,17 +241,12 @@ impl<'src> Iterator for Lexer<'src> {
                 '=' => break f(self, cs.next(), '=', '=', TK::EqualEqual, TK::Equal),
                 '<' => break f(self, cs.next(), '<', '=', TK::LessEqual, TK::Less),
                 '>' => break f(self, cs.next(), '>', '=', TK::GreaterEqual, TK::Greater),
-                '&' => {
-                    break f(
-                        self,
-                        cs.next(),
-                        '&',
-                        '&',
-                        TK::DoubleAmpersand,
-                        TK::Ampersand,
-                    )
-                }
+                '&' => break f(self, cs.next(), '&', '&', TK::DoubleAmpersnd, TK::Ampersand),
                 '|' => break f(self, cs.next(), '|', '|', TK::DoublePipe, TK::Pipe),
+                '"' => todo!("strings are not yet handled"),
+                c if c.is_digit(10) => {
+                    todo!("cannot parse numbers yet")
+                }
                 c if c == '_' || c.is_alphabetic() => {
                     let byte_start = self.byte_pos;
                     let mut end = byte_start + c.len_utf8();
@@ -275,7 +281,7 @@ fn basic() {
     let s = "x && y;";
     let mut l = Lexer::new(s);
     assert_eq!(TokenKind::Ident("x"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::DoubleAmpersand, l.next().unwrap().kind);
+    assert_eq!(TokenKind::DoubleAmpersnd, l.next().unwrap().kind);
     assert_eq!(TokenKind::Ident("y"), l.next().unwrap().kind);
     assert_eq!(TokenKind::Semicolon, l.next().unwrap().kind);
     assert_eq!(None, l.next());
@@ -286,7 +292,7 @@ fn multichar_ident() {
     let s = "hola && adeu || (si % no)";
     let mut l = Lexer::new(s);
     assert_eq!(TokenKind::Ident("hola"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::DoubleAmpersand, l.next().unwrap().kind);
+    assert_eq!(TokenKind::DoubleAmpersnd, l.next().unwrap().kind);
     assert_eq!(TokenKind::Ident("adeu"), l.next().unwrap().kind);
     assert_eq!(TokenKind::DoublePipe, l.next().unwrap().kind);
 
