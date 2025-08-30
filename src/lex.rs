@@ -164,6 +164,8 @@ impl<'src> Lexer<'src> {
 }
 
 impl<'src> Iterator for Lexer<'src> {
+    // TODO: Upon unrecognized char, return it as an error
+    //       i.e. make Item = Result<Token, LexError>
     type Item = Token<'src>;
 
     fn next(&mut self) -> Option<Self::Item> {
