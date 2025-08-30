@@ -20,6 +20,7 @@ pub enum TokenKind<'src> {
     BracketOpen,
     BracketClose,
     Comma,
+    QuestionMark,
     Colon,
     Dot,
     Plus,
@@ -32,6 +33,8 @@ pub enum TokenKind<'src> {
     StarEqual,
     SlashEqual,
     PercentEqual,
+    PostIncrement,
+    PreIncrement,
     Semicolon,
     Tilde, // one's complement!
     TildeEqual,
@@ -41,12 +44,19 @@ pub enum TokenKind<'src> {
     GreaterEqual,
     Less,
     Greater,
+    ShiftLeft,
+    ShiftRight,
+    ShiftLeftEqual,
+    ShiftRightEqual,
+    Xor,
+    XorEqual,
     Bang,
     Equal,
     Ampersand,
     DoubleAmpersnd,
     Pipe,
     DoublePipe,
+    RightArrow, // a->b == (*a).b
     String(&'src str),
     /// We don't know the precision yet, so we keep the whole source
     Integer(&'src str),
@@ -209,7 +219,7 @@ impl<'src> Iterator for Lexer<'src> {
         }
         let f = |s, next, left, right, yes, no| Some(followed_by(s, next, left, right, yes, no));
 
-        let mut cs = self.rest().chars();
+        let mut cs = self.rest().chars().peekable();
         loop {
             match cs.next()? {
                 ws if ws.is_whitespace() => {
@@ -231,8 +241,10 @@ impl<'src> Iterator for Lexer<'src> {
                 ']' => break Some(ret_and_adv(self, ']', TK::BracketClose)),
                 ',' => break Some(ret_and_adv(self, ',', TK::Comma)),
                 ':' => break Some(ret_and_adv(self, ':', TK::Colon)),
+                '?' => break Some(ret_and_adv(self, ']', TK::QuestionMark)),
                 ';' => break Some(ret_and_adv(self, ';', TK::Semicolon)),
                 '.' => break Some(ret_and_adv(self, '.', TK::Dot)),
+                // TODO: Add pre/post-increment
                 '+' => break f(self, cs.next(), '+', '=', TK::PlusEqual, TK::Plus),
                 // TODO: also allow negative numbers
                 '-' => break f(self, cs.next(), '-', '=', TK::MinusEqual, TK::Minus),
@@ -242,6 +254,7 @@ impl<'src> Iterator for Lexer<'src> {
                 '~' => break f(self, cs.next(), '~', '=', TK::TildeEqual, TK::Tilde),
                 '!' => break f(self, cs.next(), '!', '=', TK::BangEqual, TK::Bang),
                 '=' => break f(self, cs.next(), '=', '=', TK::EqualEqual, TK::Equal),
+                // TODO: Add `<<` and `<<=`
                 '<' => break f(self, cs.next(), '<', '=', TK::LessEqual, TK::Less),
                 '>' => break f(self, cs.next(), '>', '=', TK::GreaterEqual, TK::Greater),
                 '&' => break f(self, cs.next(), '&', '&', TK::DoubleAmpersnd, TK::Ampersand),
