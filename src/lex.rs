@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 pub struct Lexer<'src> {
     whole: &'src str,
@@ -6,12 +6,12 @@ pub struct Lexer<'src> {
     byte_pos: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct Token<'src> {
     pub kind: TokenKind<'src>,
     pub byte_start: usize,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum TokenKind<'src> {
     ParenOpen,
     ParenClose,
@@ -33,8 +33,10 @@ pub enum TokenKind<'src> {
     StarEqual,
     SlashEqual,
     PercentEqual,
-    PostIncrement,
     PreIncrement,
+    PostIncrement,
+    PreDecrement,
+    PostDecrement,
     Semicolon,
     Tilde, // one's complement!
     TildeEqual,
@@ -66,7 +68,7 @@ pub enum TokenKind<'src> {
     Ident(&'src str),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Keyword {
     KwAuto,
     KwBreak,
@@ -173,10 +175,29 @@ impl<'src> Lexer<'src> {
     }
 }
 
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LexerError<'src> {
+    pub whole: &'src str,
+    pub byte_pos: usize,
+    pub kind: LexerErrorKind,
+}
+
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LexerErrorKind {
+    #[error("unrecognized char: {0}")]
+    Unrecognized(char),
+}
+
+impl<'src> Display for LexerError<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 impl<'src> Iterator for Lexer<'src> {
     // TODO: Upon unrecognized char, return it as an error
     //       i.e. make Item = Result<Token, LexError>
-    type Item = Token<'src>;
+    type Item = Result<Token<'src>, LexerError<'src>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         use TokenKind as TK;
@@ -217,7 +238,7 @@ impl<'src> Iterator for Lexer<'src> {
                 }
             }
         }
-        let f = |s, next, left, right, yes, no| Some(followed_by(s, next, left, right, yes, no));
+        let f = |s, next, l, r, yes, no| Some(Ok(followed_by(s, next, l, r, yes, no)));
 
         let mut cs = self.rest().chars().peekable();
         loop {
@@ -233,17 +254,17 @@ impl<'src> Iterator for Lexer<'src> {
                 {
                     todo!("comments are not yet handled!")
                 }
-                '(' => break Some(ret_and_adv(self, '(', TK::ParenOpen)),
-                ')' => break Some(ret_and_adv(self, ')', TK::ParenClose)),
-                '{' => break Some(ret_and_adv(self, '{', TK::BraceOpen)),
-                '}' => break Some(ret_and_adv(self, '}', TK::BraceClose)),
-                '[' => break Some(ret_and_adv(self, '[', TK::BracketOpen)),
-                ']' => break Some(ret_and_adv(self, ']', TK::BracketClose)),
-                ',' => break Some(ret_and_adv(self, ',', TK::Comma)),
-                ':' => break Some(ret_and_adv(self, ':', TK::Colon)),
-                '?' => break Some(ret_and_adv(self, ']', TK::QuestionMark)),
-                ';' => break Some(ret_and_adv(self, ';', TK::Semicolon)),
-                '.' => break Some(ret_and_adv(self, '.', TK::Dot)),
+                '(' => break Some(Ok(ret_and_adv(self, '(', TK::ParenOpen))),
+                ')' => break Some(Ok(ret_and_adv(self, ')', TK::ParenClose))),
+                '{' => break Some(Ok(ret_and_adv(self, '{', TK::BraceOpen))),
+                '}' => break Some(Ok(ret_and_adv(self, '}', TK::BraceClose))),
+                '[' => break Some(Ok(ret_and_adv(self, '[', TK::BracketOpen))),
+                ']' => break Some(Ok(ret_and_adv(self, ']', TK::BracketClose))),
+                ',' => break Some(Ok(ret_and_adv(self, ',', TK::Comma))),
+                ':' => break Some(Ok(ret_and_adv(self, ':', TK::Colon))),
+                '?' => break Some(Ok(ret_and_adv(self, ']', TK::QuestionMark))),
+                ';' => break Some(Ok(ret_and_adv(self, ';', TK::Semicolon))),
+                '.' => break Some(Ok(ret_and_adv(self, '.', TK::Dot))),
                 // TODO: Add pre/post-increment
                 '+' => break f(self, cs.next(), '+', '=', TK::PlusEqual, TK::Plus),
                 // TODO: also allow negative numbers
@@ -274,7 +295,7 @@ impl<'src> Iterator for Lexer<'src> {
                     self.byte_pos = end;
 
                     let ident = &self.whole[byte_start..end];
-                    break Some(if let Ok(keyword) = Keyword::from_str(ident) {
+                    break Some(Ok(if let Ok(keyword) = Keyword::from_str(ident) {
                         Token {
                             kind: TokenKind::Keyword(keyword),
                             byte_start,
@@ -284,9 +305,15 @@ impl<'src> Iterator for Lexer<'src> {
                             kind: TokenKind::Ident(ident),
                             byte_start,
                         }
-                    });
+                    }));
                 }
-                _ => break None,
+                c => {
+                    break Some(Err(LexerError {
+                        whole: self.whole,
+                        byte_pos: self.byte_pos,
+                        kind: LexerErrorKind::Unrecognized(c),
+                    }))
+                }
             }
         }
     }
@@ -294,94 +321,102 @@ impl<'src> Iterator for Lexer<'src> {
 
 #[test]
 fn basic() {
-    let s = "x && y;";
-    let mut l = Lexer::new(s);
-    assert_eq!(TokenKind::Ident("x"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::DoubleAmpersnd, l.next().unwrap().kind);
-    assert_eq!(TokenKind::Ident("y"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::Semicolon, l.next().unwrap().kind);
+    let (mut l, next) = (Lexer::new("x && y;"), |l: &mut Lexer<'static>| {
+        l.next().unwrap().unwrap().kind
+    });
+    assert_eq!(TokenKind::Ident("x"), next(&mut l));
+    assert_eq!(TokenKind::DoubleAmpersnd, next(&mut l));
+    assert_eq!(TokenKind::Ident("y"), next(&mut l));
+    assert_eq!(TokenKind::Semicolon, next(&mut l));
     assert_eq!(None, l.next());
 }
 
 #[test]
 fn multichar_ident() {
-    let s = "hola && adeu || (si % no)";
-    let mut l = Lexer::new(s);
-    assert_eq!(TokenKind::Ident("hola"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::DoubleAmpersnd, l.next().unwrap().kind);
-    assert_eq!(TokenKind::Ident("adeu"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::DoublePipe, l.next().unwrap().kind);
+    let (mut l, next) = (
+        Lexer::new("hola && adeu || (si % no)"),
+        |l: &mut Lexer<'static>| l.next().unwrap().unwrap().kind,
+    );
+    assert_eq!(TokenKind::Ident("hola"), next(&mut l));
+    assert_eq!(TokenKind::DoubleAmpersnd, next(&mut l));
+    assert_eq!(TokenKind::Ident("adeu"), next(&mut l));
+    assert_eq!(TokenKind::DoublePipe, next(&mut l));
 
-    assert_eq!(TokenKind::ParenOpen, l.next().unwrap().kind);
-    assert_eq!(TokenKind::Ident("si"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::Percent, l.next().unwrap().kind);
-    assert_eq!(TokenKind::Ident("no"), l.next().unwrap().kind);
-    assert_eq!(TokenKind::ParenClose, l.next().unwrap().kind);
+    assert_eq!(TokenKind::ParenOpen, next(&mut l));
+    assert_eq!(TokenKind::Ident("si"), next(&mut l));
+    assert_eq!(TokenKind::Percent, next(&mut l));
+    assert_eq!(TokenKind::Ident("no"), next(&mut l));
+    assert_eq!(TokenKind::ParenClose, next(&mut l));
     assert_eq!(None, l.next());
 }
 
 #[test]
 fn function_def() {
-    let s = "void main() {}";
-    let mut l = Lexer::new(s);
-    assert_eq!(TokenKind::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
-    assert_eq!(TokenKind::Ident("main"), l.next().unwrap().kind);
+    let (mut l, next) = (Lexer::new("void main() {}"), |l: &mut Lexer<'static>| {
+        l.next().unwrap().unwrap().kind
+    });
+    assert_eq!(TokenKind::Keyword(Keyword::KwVoid), next(&mut l));
+    assert_eq!(TokenKind::Ident("main"), next(&mut l));
 
-    assert_eq!(TokenKind::ParenOpen, l.next().unwrap().kind);
-    assert_eq!(TokenKind::ParenClose, l.next().unwrap().kind);
+    assert_eq!(TokenKind::ParenOpen, next(&mut l));
+    assert_eq!(TokenKind::ParenClose, next(&mut l));
 
-    assert_eq!(TokenKind::BraceOpen, l.next().unwrap().kind);
-    assert_eq!(TokenKind::BraceClose, l.next().unwrap().kind);
+    assert_eq!(TokenKind::BraceOpen, next(&mut l));
+    assert_eq!(TokenKind::BraceClose, next(&mut l));
 }
 
 #[test]
 fn function_def_with_args() {
     use Keyword as Kw;
     use TokenKind as TK;
-    let s = "void main(int argc, char **argv) {}";
-    let mut l = Lexer::new(s);
+    let (mut l, next) = (
+        Lexer::new("void main(int argc, char **argv) {}"),
+        |l: &mut Lexer<'static>| l.next().unwrap().unwrap().kind,
+    );
 
-    assert_eq!(TK::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
-    assert_eq!(TK::Ident("main"), l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Keyword::KwVoid), next(&mut l));
+    assert_eq!(TK::Ident("main"), next(&mut l));
 
-    assert_eq!(TK::ParenOpen, l.next().unwrap().kind);
+    assert_eq!(TK::ParenOpen, next(&mut l));
 
-    assert_eq!(TK::Keyword(Kw::KwInt), l.next().unwrap().kind);
-    assert_eq!(TK::Ident("argc"), l.next().unwrap().kind);
-    assert_eq!(TK::Comma, l.next().unwrap().kind);
-    assert_eq!(TK::Keyword(Kw::KwChar), l.next().unwrap().kind);
-    assert_eq!(TK::Star, l.next().unwrap().kind);
-    assert_eq!(TK::Star, l.next().unwrap().kind);
-    assert_eq!(TK::Ident("argv"), l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Kw::KwInt), next(&mut l));
+    assert_eq!(TK::Ident("argc"), next(&mut l));
+    assert_eq!(TK::Comma, next(&mut l));
+    assert_eq!(TK::Keyword(Kw::KwChar), next(&mut l));
+    assert_eq!(TK::Star, next(&mut l));
+    assert_eq!(TK::Star, next(&mut l));
+    assert_eq!(TK::Ident("argv"), next(&mut l));
 
-    assert_eq!(TK::ParenClose, l.next().unwrap().kind);
+    assert_eq!(TK::ParenClose, next(&mut l));
 
-    assert_eq!(TK::BraceOpen, l.next().unwrap().kind);
-    assert_eq!(TK::BraceClose, l.next().unwrap().kind);
+    assert_eq!(TK::BraceOpen, next(&mut l));
+    assert_eq!(TK::BraceClose, next(&mut l));
 }
 
 #[test]
 fn function_def_with_args_and_newlines() {
     use Keyword as Kw;
     use TokenKind as TK;
-    let s = "void\nmain(int argc,\nchar **argv)\n{\n\n}\n\n\n";
-    let mut l = Lexer::new(s);
+    let (mut l, next) = (
+        Lexer::new("void main(int argc, char **argv) {}"),
+        |l: &mut Lexer<'static>| l.next().unwrap().unwrap().kind,
+    );
 
-    assert_eq!(TK::Keyword(Keyword::KwVoid), l.next().unwrap().kind);
-    assert_eq!(TK::Ident("main"), l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Keyword::KwVoid), next(&mut l));
+    assert_eq!(TK::Ident("main"), next(&mut l));
 
-    assert_eq!(TK::ParenOpen, l.next().unwrap().kind);
+    assert_eq!(TK::ParenOpen, next(&mut l));
 
-    assert_eq!(TK::Keyword(Kw::KwInt), l.next().unwrap().kind);
-    assert_eq!(TK::Ident("argc"), l.next().unwrap().kind);
-    assert_eq!(TK::Comma, l.next().unwrap().kind);
-    assert_eq!(TK::Keyword(Kw::KwChar), l.next().unwrap().kind);
-    assert_eq!(TK::Star, l.next().unwrap().kind);
-    assert_eq!(TK::Star, l.next().unwrap().kind);
-    assert_eq!(TK::Ident("argv"), l.next().unwrap().kind);
+    assert_eq!(TK::Keyword(Kw::KwInt), next(&mut l));
+    assert_eq!(TK::Ident("argc"), next(&mut l));
+    assert_eq!(TK::Comma, next(&mut l));
+    assert_eq!(TK::Keyword(Kw::KwChar), next(&mut l));
+    assert_eq!(TK::Star, next(&mut l));
+    assert_eq!(TK::Star, next(&mut l));
+    assert_eq!(TK::Ident("argv"), next(&mut l));
 
-    assert_eq!(TK::ParenClose, l.next().unwrap().kind);
+    assert_eq!(TK::ParenClose, next(&mut l));
 
-    assert_eq!(TK::BraceOpen, l.next().unwrap().kind);
-    assert_eq!(TK::BraceClose, l.next().unwrap().kind);
+    assert_eq!(TK::BraceOpen, next(&mut l));
+    assert_eq!(TK::BraceClose, next(&mut l));
 }
