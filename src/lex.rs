@@ -232,6 +232,7 @@ impl<'src> Iterator for Lexer<'src> {
                 ';' => break Some(ret_and_adv(self, ';', TK::Semicolon)),
                 '.' => break Some(ret_and_adv(self, '.', TK::Dot)),
                 '+' => break f(self, cs.next(), '+', '=', TK::PlusEqual, TK::Plus),
+                // TODO: also allow negative numbers
                 '-' => break f(self, cs.next(), '-', '=', TK::MinusEqual, TK::Minus),
                 '*' => break f(self, cs.next(), '*', '=', TK::StarEqual, TK::Star),
                 '/' => break f(self, cs.next(), '/', '=', TK::StarEqual, TK::Star),

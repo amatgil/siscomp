@@ -1,21 +1,50 @@
 //! Non-copy parser
-//! The core of the parser is [IResult], which every parsing-related function
-//! returns. It can be propagated up with `?` or handled locally to
-//! implement alternatives
-//!
-//! (Note that copying _does_ occur when an error is reached for prettier reporting)
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use std::str::FromStr;
+
+use crate::lex::*;
+
+#[derive(Debug, Clone)]
 pub enum Statement<'a> {
     FunctionDeclaration {
-        ret_type: &'a str,
+        ty: &'a str,
         name: &'a str,
         args: Vec<(&'a str, &'a str)>,
         body: Vec<Statement<'a>>,
     },
+    VarDeclaration {
+        ty: &'a str,
+        name: &'a str,
+        rhs: Expression,
+    },
 }
 
-fn parse_function<'src>(input: &str) -> u8 {
+// TODO: impl this
+#[derive(Debug, Clone)]
+pub struct Expression;
+
+impl FromStr for Expression {
+    type Err = u8;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        todo!("Pratt parsing goes here")
+    }
+}
+
+fn parse<'src>(input: &str) -> Vec<Statement> {
+    use Token as T;
+    use TokenKind as TK;
+    let mut tokens = Lexer::new(input).peekable();
+
+    match tokens.peek() {
+        Some(T {
+            kind: TK::Keyword(kw),
+            ..
+        }) => {}
+        Some(_) => todo!(),
+        None => todo!(),
+    }
+
     todo!()
 }
 
